@@ -1,0 +1,7 @@
+# Pile-Supported Embankment Designer - dependencies
+#
+# Tkinter ships with standard Python on Windows, so no extra GUI package is
+# needed. PyInstaller is only needed to BUILD the .exe, not to run the
+# Python version.
+
+pyinstaller>=6.0

@@ -1,0 +1,16 @@
+# Python cache and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# PyInstaller output
+build/
+dist/
+*.spec
+
+# Local editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
