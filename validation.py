@@ -80,6 +80,16 @@ def validate_common_inputs(inp):
         )
 
     require_positive(inp["FS"], "Factor of safety (FS)")
+    if inp.get("Hcr_method") == "user_input":
+        require_positive(inp.get("Hcr_value"), "Critical height (Hcr)")
+    else:
+        require_positive(inp.get("a"), "Square column width (a)")
+        if inp.get("Hcr_condition") == "Filz et al. (2015)":
+            require_positive(inp.get("s_prime"), "Distance from column edge to array centroid (s')")
+    if inp.get("Hcr_method") == "table_10_4":
+        require_positive(inp.get("Hcr_factor"), "Table 10.4 critical-height factor")
+    elif inp.get("Hcr_method") == "user_input":
+        require_positive(inp.get("Hcr_value"), "Critical height (Hcr)")
 
 
 def validate_hewlett_randolph_inputs(inp):

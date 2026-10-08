@@ -51,7 +51,6 @@ def build_report_text(project_name, stress_method, strain_method, inputs, result
     lines.append("-" * 72)
     for step in result["all_steps"]:
         lines.append(f"* {step['title']} ({step['symbol']})")
-        lines.append(f"  Source: {step['source']}")
         lines.append(f"  Equation:     {step['equation']}")
         lines.append(f"  Substitution: {step['substitution']}")
         r = step["result"]

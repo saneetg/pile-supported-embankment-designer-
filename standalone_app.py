@@ -4,6 +4,9 @@ import datetime
 import math
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from methods.critical_height_conditions import (
+    METHODS, CHEN_2008_FACTORS, CHEN_2010_FACTORS, calculate as calculate_hcr_condition,
+)
 
 
 class ValidationError(Exception):
@@ -61,6 +64,14 @@ def validate_inputs(values, stress_method):
     require_positive(values["FS"], "Factor of safety (FS)")
     if stress_method == "hewlett_randolph":
         require_positive(values.get("Kp"), "Kp (coefficient of passive earth pressure)")
+    if values.get("Hcr_method") == "table_10_4":
+        require_positive(values.get("Hcr_factor"), "Table 10.4 critical-height factor")
+    elif values.get("Hcr_method") == "user_input":
+        require_positive(values.get("Hcr_value"), "Critical height (Hcr)")
+    elif values.get("Hcr_condition") == "Filz et al. (2015)":
+        require_positive(values.get("s_prime"), "Distance s'")
+    else:
+        require_positive(values.get("a"), "Square column width (a)")
 
 
 def step(title, symbol, equation, substitution, result, unit, source):
@@ -74,7 +85,13 @@ def step(title, symbol, equation, substitution, result, unit, source):
 def adapted_terzaghi(values):
     d, s = values["d"], values["s"]
     a = math.sqrt(math.pi * d ** 2 / 4)
-    hcr = 1.4 * (s - a)
+    if values["Hcr_method"] == "user_input":
+        hcr = values["Hcr_value"]
+        hcr_equation = "H_cr = user-entered value"
+    else:
+        critical = calculate_hcr_condition(values["Hcr_condition"], s=s, a=values["a"], d=values["d"], s_prime=values.get("s_prime"), factor=values.get("Hcr_factor"))
+        hcr = critical["hcr"]
+        hcr_equation = critical["formula"]
     denominator = s ** 2 - a ** 2
     alpha1 = 4 * a * values["K1"] * math.tan(math.radians(values["phi1"])) / denominator
     alpha2 = 4 * a * values["K2"] * math.tan(math.radians(values["phi2"])) / denominator
@@ -99,7 +116,7 @@ def adapted_terzaghi(values):
         equation = "Engineering reference Eq. (10.20)"
     steps = [
         step("Equivalent column width", "a", "a = sqrt(pi * d^2 / 4)", f"a = sqrt(pi * {d}^2 / 4)", a, "m", "Engineering reference: equivalent circular-column geometry"),
-        step("Critical height", "H_cr", "H_cr = 1.4 (s - a)", f"H_cr = 1.4 ({s} - {a:.4f})", hcr, "m", "Engineering reference: arching critical-height criterion"),
+        step("Critical height", "H_cr", hcr_equation, f"H_cr = {hcr:.4f} m", hcr, "m", "Table 10.4 critical-height selection"),
         step("Alpha 1 (platform fill arching coefficient)", "alpha_1", "alpha_1 = 4 a K1 tan(phi1) / (s^2 - a^2)", f"alpha_1 = 4({a:.4f})({values['K1']})tan({values['phi1']} deg) / ({s}^2 - {a:.4f}^2)", alpha1, "1/m", "Engineering reference: arching coefficient definition"),
         step("Alpha 2 (embankment fill arching coefficient)", "alpha_2", "alpha_2 = 4 a K2 tan(phi2) / (s^2 - a^2)", f"alpha_2 = 4({a:.4f})({values['K2']})tan({values['phi2']} deg) / ({s}^2 - {a:.4f}^2)", alpha2, "1/m", "Engineering reference: arching coefficient definition"),
         step(f"Average vertical stress above geosynthetic ({case})", "p_sl", equation, "See equation; case selected automatically from H_cr vs H1, H", psl, "kPa", equation),
@@ -126,6 +143,11 @@ def hewlett_randolph(values):
 
 
 def run_design(values, stress_method="adapted_terzaghi", strain_method="giroud"):
+    values = dict(values)
+    values.setdefault("Hcr_method", "table_10_4")
+    values.setdefault("Hcr_condition", METHODS[0])
+    values.setdefault("Hcr_factor", 1.4)
+    values.setdefault("Hcr_value", None)
     validate_inputs(values, stress_method)
     modulus_ratio = values["Ec"] / values["Es"]
     if modulus_ratio <= 100:
@@ -137,6 +159,10 @@ def run_design(values, stress_method="adapted_terzaghi", strain_method="giroud")
     else:
         raise CalculationError(f"Unknown stress method: {stress_method}")
     a = stress["a"]
+    if values["Hcr_method"] == "user_input":
+        critical = {"reference": "User input", "formula": "Hcr = user-entered value", "hcr": values["Hcr_value"], "inputs": {"H": values["H"]}}
+    else:
+        critical = calculate_hcr_condition(values["Hcr_condition"], s=values["s"], a=values["a"], d=values["d"], s_prime=values.get("s_prime"), factor=values.get("Hcr_factor"))
     h2 = values["H"] - values["H1"]
     dsigma = (values["gamma1"] * values["H1"] + values["gamma2"] * h2) / (1 + (a ** 2 / values["s"] ** 2) * (values["n"] - 1))
     q_ult = 5.14 * values["cu"]
@@ -166,7 +192,7 @@ def run_design(values, stress_method="adapted_terzaghi", strain_method="giroud")
     strain_steps = [step(f"Tensile strain in geosynthetic ({strain_name})", "epsilon_g", strain_equation, f"dS_g={values['dS_allow']}, s={values['s']}, a={a:.4f}", epsilon, "(fraction; multiply by 100 for %)", strain_source)]
     tension = ((stress["psl"] - dsigma) * (values["s"] ** 2 - a ** 2) / (4 * a)) * math.sqrt(1 + 1 / (6 * epsilon))
     tension_steps = [step("Tension in geosynthetic reinforcement", "T_g", "T_g = [(p_sl - delta_sigma_s)(s^2-a^2)/(4a)] * sqrt(1 + 1/(6*epsilon_g))", f"T_g = [({stress['psl']:.3f}-{dsigma:.3f})({values['s']}^2-{a:.4f}^2)/(4*{a:.4f})] * sqrt(1 + 1/(6*{epsilon:.5f}))", tension, "kN/m", "Engineering reference: geosynthetic tensile demand equation")]
-    return {"modulus_ratio": modulus_ratio, "arching_ok": True, "stress_method": stress["method"], "stress_result": stress, "strain_method": strain_name, "psl": stress["psl"], "a": a, "dsigma_s": dsigma, "epsilon_g": epsilon, "Tg": tension, "foundation_result": {"dsigma_s": dsigma, "q_ult": q_ult, "q_a": q_a, "passed": passed}, "checks": [{"name": "Soil arching fully mobilized (Ec/Es > 100)", "required": "> 100", "calculated": f"{modulus_ratio:.1f}", "status": "PASS"}, {"name": "Foundation bearing capacity (q_a >= delta_sigma_s)", "required": f">= {dsigma:.2f} kPa", "calculated": f"q_a = {q_a:.2f} kPa", "status": "PASS" if passed else "FAIL"}], "all_steps": stress["steps"] + foundation_steps + strain_steps + tension_steps}
+    return {"modulus_ratio": modulus_ratio, "arching_ok": True, "stress_method": stress["method"], "stress_result": stress, "critical_height_result": critical, "strain_method": strain_name, "psl": stress["psl"], "a": a, "dsigma_s": dsigma, "epsilon_g": epsilon, "Tg": tension, "foundation_result": {"dsigma_s": dsigma, "q_ult": q_ult, "q_a": q_a, "passed": passed}, "checks": [{"name": "Soil arching fully mobilized (Ec/Es > 100)", "required": "> 100", "calculated": f"{modulus_ratio:.1f}", "status": "PASS"}, {"name": "Foundation bearing capacity (q_a >= delta_sigma_s)", "required": f">= {dsigma:.2f} kPa", "calculated": f"q_a = {q_a:.2f} kPa", "status": "PASS" if passed else "FAIL"}], "all_steps": stress["steps"] + foundation_steps + strain_steps + tension_steps}
 
 
 def build_report(project_name, values, result):
@@ -176,7 +202,7 @@ def build_report(project_name, values, result):
             lines.append(f"  {key}: {value}")
     lines.extend(["", "CALCULATIONS"])
     for item in result["all_steps"]:
-        lines.extend([f"* {item['title']} ({item['symbol']})", f"  Reference: {item['source']}", f"  Equation: {item['equation']}", f"  Substitution: {item['substitution']}", f"  Result: {item['result']} {item['unit']}", ""])
+        lines.extend([f"* {item['title']} ({item['symbol']})", f"  Equation: {item['equation']}", f"  Substitution: {item['substitution']}", f"  Result: {item['result']} {item['unit']}", ""])
     lines.extend(["DESIGN CHECKS"])
     for check in result["checks"]:
         lines.append(f"  {check['name']}: {check['status']} ({check['calculated']})")
@@ -184,8 +210,8 @@ def build_report(project_name, values, result):
     return "\n".join(lines)
 
 
-EXAMPLE_VALUES = {"H": "5.0", "H1": "0.60", "gamma1": "20.0", "gamma2": "18.0", "phi1": "38.0", "phi2": "30.0", "K1": "0.75", "K2": "0.75", "d": "1.0", "s": "2.5", "p": "13.0", "Ec": "1000.0", "Es": "4.0", "cu": "20.0", "FS": "2.0", "n": "25", "dS_allow": "0.15", "Kp": ""}
-FIELD_LABELS = [("H", "Embankment height", "H", "m"), ("gamma2", "Embankment fill unit weight", "gamma2", "kN/m3"), ("phi2", "Embankment fill friction angle", "phi2", "deg"), ("H1", "Load transfer platform thickness", "H1", "m"), ("gamma1", "Platform fill unit weight", "gamma1", "kN/m3"), ("phi1", "Platform fill friction angle", "phi1", "deg"), ("K1", "Platform lateral earth pressure coeff.", "K1", ""), ("K2", "Embankment lateral earth pressure coeff.", "K2", ""), ("d", "Column diameter", "d", "m"), ("s", "Column spacing (center to center)", "s", "m"), ("Ec", "Column (concrete) modulus", "Ec", "MPa"), ("Es", "Soft soil modulus", "Es", "MPa"), ("cu", "Undrained shear strength of soft soil", "cu", "kPa"), ("n", "Stress concentration ratio (n)", "n", ""), ("FS", "Factor of safety (bearing check)", "FS", ""), ("p", "Surcharge on embankment", "p", "kPa"), ("dS_allow", "Allowable differential settlement", "dS", "m"), ("Kp", "Passive earth pressure coeff. (Hewlett & Randolph only)", "Kp", "")]
+EXAMPLE_VALUES = {"H": "5.0", "H1": "0.60", "gamma1": "20.0", "gamma2": "18.0", "phi1": "38.0", "phi2": "30.0", "K1": "0.75", "K2": "0.75", "d": "1.0", "s": "2.5", "p": "13.0", "Ec": "1000.0", "Es": "4.0", "cu": "20.0", "FS": "2.0", "n": "25", "dS_allow": "0.15", "Kp": "", "Hcr_factor": "1.4", "Hcr_value": "", "a": "1.0", "s_prime": ""}
+FIELD_LABELS = [("H", "Embankment height", "H", "m"), ("gamma2", "Embankment fill unit weight", "gamma2", "kN/m3"), ("phi2", "Embankment fill friction angle", "phi2", "deg"), ("H1", "Load transfer platform thickness", "H1", "m"), ("gamma1", "Platform fill unit weight", "gamma1", "kN/m3"), ("phi1", "Platform fill friction angle", "phi1", "deg"), ("K1", "Platform lateral earth pressure coeff.", "K1", ""), ("K2", "Embankment lateral earth pressure coeff.", "K2", ""), ("d", "Column diameter", "d", "m"), ("s", "Column spacing (center to center)", "s", "m"), ("Ec", "Column (concrete) modulus", "Ec", "MPa"), ("Es", "Soft soil modulus", "Es", "MPa"), ("cu", "Undrained shear strength of soft soil", "cu", "kPa"), ("n", "Stress concentration ratio (n)", "n", ""), ("FS", "Factor of safety (bearing check)", "FS", ""), ("p", "Surcharge on embankment", "p", "kPa"), ("dS_allow", "Allowable differential settlement", "dS", "m"), ("Kp", "Passive earth pressure coeff. (Hewlett & Randolph only)", "Kp", ""), ("Hcr_factor", "Table 10.4 critical-height factor", "factor", ""), ("Hcr_value", "User-entered critical height", "Hcr", "m"), ("a", "Square column width", "a", "m"), ("s_prime", "Distance from column edge to array centroid", "s'", "m")]
 
 
 class PSEDesignerApp(tk.Tk):
@@ -194,6 +220,7 @@ class PSEDesignerApp(tk.Tk):
         self.title("Pile-Supported Embankment Designer")
         self.geometry("900x720")
         self.entries = {}
+        self.hcr_widgets = {}
         self.result = None
         self.last_inputs = None
         self._build_ui()
@@ -212,6 +239,18 @@ class PSEDesignerApp(tk.Tk):
         self.strain_method_var = tk.StringVar(value="giroud")
         for col, (label, value) in enumerate((("Giroud", "giroud"), ("Catenary", "catenary")), 1):
             tk.Radiobutton(top, text=label, variable=self.strain_method_var, value=value).grid(row=2, column=col, sticky="w")
+        tk.Label(top, text="Critical Height:").grid(row=3, column=0, sticky="w")
+        self.hcr_method_var = tk.StringVar(value="table_10_4")
+        tk.Radiobutton(top, text="Suggested (Table 10.4)", variable=self.hcr_method_var, value="table_10_4", command=self._hcr_changed).grid(row=3, column=1, sticky="w")
+        tk.Radiobutton(top, text="User input", variable=self.hcr_method_var, value="user_input", command=self._hcr_changed).grid(row=3, column=2, sticky="w")
+        self.hcr_condition_var = tk.StringVar(value=METHODS[0])
+        self.hcr_condition_combo = ttk.Combobox(top, textvariable=self.hcr_condition_var, values=METHODS, state="readonly", width=30)
+        self.hcr_condition_combo.grid(row=3, column=3, sticky="w")
+        self.hcr_factor_var = tk.StringVar(value="1.4")
+        self.hcr_factor_combo = ttk.Combobox(top, textvariable=self.hcr_factor_var, values=[str(x) for x in CHEN_2008_FACTORS], state="disabled", width=5)
+        self.hcr_factor_combo.grid(row=3, column=4, sticky="w")
+        self.hcr_condition_combo.bind("<<ComboboxSelected>>", lambda _event: self._hcr_changed())
+        self.hcr_factor_combo.bind("<<ComboboxSelected>>", lambda _event: self._hcr_changed())
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=8, pady=6)
         self.inputs_tab, self.results_tab, self.details_tab = (tk.Frame(self.notebook) for _ in range(3))
@@ -219,6 +258,7 @@ class PSEDesignerApp(tk.Tk):
         self.notebook.add(self.results_tab, text="Results")
         self.notebook.add(self.details_tab, text="Calculation Details")
         self._build_inputs()
+        self.entries["Hcr_factor"].set("1.4")
         self.results_text = tk.Text(self.results_tab, wrap="word", font=("Courier New", 10))
         self.results_text.pack(fill="both", expand=True, padx=10, pady=10)
         self.results_text.insert("1.0", "Enter inputs and click Calculate to see results here.")
@@ -233,6 +273,7 @@ class PSEDesignerApp(tk.Tk):
             tk.Button(buttons, text=label, width=14, command=command).pack(side="left", padx=4)
         tk.Label(self, text="Preliminary design tool. Confirm governing code requirements, project criteria, and geotechnical assumptions before issue for construction.", fg="gray20", wraplength=880, justify="left").pack(fill="x", padx=8, pady=(0, 6))
         self._method_changed()
+        self._hcr_changed()
 
     def _build_inputs(self):
         frame = tk.Frame(self.inputs_tab, padx=10, pady=10)
@@ -248,6 +289,10 @@ class PSEDesignerApp(tk.Tk):
             entry.grid(row=row, column=2, sticky="w")
             tk.Label(frame, text=unit).grid(row=row, column=3, sticky="w", padx=6)
             self.entries[key] = variable
+            if key in ("Hcr_factor", "Hcr_value"):
+                self.hcr_widgets[key] = entry
+            if key in ("a", "s_prime"):
+                self.hcr_widgets[key] = entry
             if key == "Kp":
                 self.kp_widgets = [entry]
 
@@ -256,11 +301,24 @@ class PSEDesignerApp(tk.Tk):
         for widget in self.kp_widgets:
             widget.config(state=state)
 
+    def _hcr_changed(self):
+        suggested = self.hcr_method_var.get() == "table_10_4"
+        self.hcr_widgets["Hcr_value"].config(
+            state="normal" if not suggested else "disabled"
+        )
+        self.hcr_condition_combo.config(state="readonly" if suggested else "disabled")
+        self.hcr_factor_combo.config(state="readonly" if suggested and self.hcr_condition_var.get() in METHODS[2:4] else "disabled")
+        self.hcr_widgets["a"].config(state="normal" if suggested and self.hcr_condition_var.get() != METHODS[5] else "disabled")
+        self.hcr_widgets["s_prime"].config(state="normal" if suggested and self.hcr_condition_var.get() == METHODS[5] else "disabled")
+
     def _load_example(self):
         for key, value in EXAMPLE_VALUES.items():
             self.entries[key].set(value)
         self.project_name_var.set("Design Example 10.3")
         self._method_changed()
+        self.hcr_method_var.set("table_10_4")
+        self.hcr_condition_var.set(METHODS[0])
+        self._hcr_changed()
 
     def _clear(self):
         for variable in self.entries.values():
@@ -275,6 +333,8 @@ class PSEDesignerApp(tk.Tk):
     def _parse_inputs(self):
         values = {}
         for key, label, symbol, _unit in FIELD_LABELS:
+            if key in ("Hcr_factor", "Hcr_value", "a", "s_prime"):
+                continue
             raw = self.entries[key].get().strip()
             if key == "Kp" and self.stress_method_var.get() != "hewlett_randolph":
                 values[key] = None
@@ -288,6 +348,19 @@ class PSEDesignerApp(tk.Tk):
                     values[key] = int(float(raw)) if key == "n" else float(raw)
                 except ValueError as error:
                     raise ValidationError(f"{label} ({symbol}) must be a number.") from error
+        values["Hcr_method"] = self.hcr_method_var.get()
+        values["Hcr_condition"] = self.hcr_condition_var.get()
+        values["Hcr_factor"] = float(self.hcr_factor_var.get())
+        for key in ("Hcr_value", "a", "s_prime"):
+            raw = self.entries[key].get().strip()
+            if values["Hcr_method"] == "user_input" and key == "Hcr_value":
+                if not raw:
+                    raise ValidationError("Critical height (Hcr) must be entered.")
+                values[key] = float(raw)
+            elif values["Hcr_method"] == "table_10_4" and key in ("a", "s_prime"):
+                values[key] = float(raw) if raw else None
+            else:
+                values[key] = None
         return values
 
     def _calculate(self):
@@ -303,7 +376,9 @@ class PSEDesignerApp(tk.Tk):
 
     def _show_results(self):
         result = self.result
-        lines = ["FINAL DESIGN RESULTS", "=" * 60, f"Method Used: {result['stress_method']}", f"Strain Method Used: {result['strain_method']}", "", f"Equivalent column width, a: {result['a']:.4f} m", f"Vertical stress above geosynthetic, p_sl: {result['psl']:.3f} kPa", f"Foundation soil resistance, dsigma_s: {result['dsigma_s']:.3f} kPa", f"Tensile strain, epsilon_g: {result['epsilon_g'] * 100:.3f} %", f"Required tension, T_g: {result['Tg']:.2f} kN/m", "", "DESIGN CHECKS"]
+        critical = result["critical_height_result"]
+        status = "satisfied" if self.last_inputs["H"] >= critical["hcr"] else "not reached"
+        lines = ["FINAL DESIGN RESULTS", "=" * 60, f"Method Used: {result['stress_method']}", f"Strain Method Used: {result['strain_method']}", "", "APPLIED CRITICAL HEIGHT CONDITION", f"Reference: {critical['reference']}", f"Equation: {critical['formula']}", f"Embankment Height H: {self.last_inputs['H']:.3f} m", f"Critical Height Hcr: {critical['hcr']:.3f} m", f"STATUS: Critical height condition is {status}.", "", f"Equivalent column width, a: {result['a']:.4f} m", f"Vertical stress above geosynthetic, p_sl: {result['psl']:.3f} kPa", f"Foundation soil resistance, dsigma_s: {result['dsigma_s']:.3f} kPa", f"Tensile strain, epsilon_g: {result['epsilon_g'] * 100:.3f} %", f"Required tension, T_g: {result['Tg']:.2f} kN/m", "", "DESIGN CHECKS"]
         for check in result["checks"]:
             lines.extend([check["name"], f"   Required: {check['required']}", f"   Calculated: {check['calculated']}", f"   STATUS: {check['status']}", ""])
         self.results_text.config(state="normal")
@@ -313,9 +388,14 @@ class PSEDesignerApp(tk.Tk):
 
     def _show_details(self):
         lines = []
+        critical = self.result["critical_height_result"]
+        lines.extend(["TABLE 10.4 CRITICAL HEIGHT CALCULATION", "", f"Reference: {critical['reference']}", f"Equation: {critical['formula']}"])
+        for key, value in critical["inputs"].items():
+            lines.append(f"{key} = {value} m")
+        lines.extend([f"Applied Critical Height: {critical['hcr']:.4f} m", ""])
         for index, item in enumerate(self.result["all_steps"], 1):
             value = f"{item['result']:.4f}" if isinstance(item["result"], float) else str(item["result"])
-            lines.extend([f"{index}. {item['title'].upper()}", "", f"Reference: {item['source']}", f"Equation: {item['equation']}", f"Substitution: {item['substitution']}", f"Result: {item['symbol']} = {value} {item['unit']}", "", "-" * 60, ""])
+            lines.extend([f"{index}. {item['title'].upper()}", "", f"Equation: {item['equation']}", f"Substitution: {item['substitution']}", f"Result: {item['symbol']} = {value} {item['unit']}", "", "-" * 60, ""])
         self.details_text.config(state="normal")
         self.details_text.delete("1.0", "end")
         self.details_text.insert("1.0", "\n".join(lines))

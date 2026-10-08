@@ -11,6 +11,7 @@ from tkinter import ttk, messagebox, filedialog
 
 from calculation_engine import run_design, CalculationError
 from validation import ValidationError
+from methods.critical_height_conditions import METHODS, CHEN_2008_FACTORS, CHEN_2010_FACTORS
 import report as report_module
 
 
@@ -56,6 +57,10 @@ FIELD_LABELS = [
     ("p", "Surcharge on embankment", "p", "kPa"),
     ("dS_allow", "Allowable differential settlement", "dS", "m"),
     ("Kp", "Passive earth pressure coeff. (Hewlett & Randolph only)", "Kp", ""),
+    ("Hcr_factor", "Table 10.4 critical-height factor", "factor", ""),
+    ("Hcr_value", "User-entered critical height", "Hcr", "m"),
+    ("a", "Square column width", "a", "m"),
+    ("s_prime", "Distance from column edge to array centroid", "s'", "m"),
 ]
 
 
@@ -67,6 +72,7 @@ class PSEDesignerApp(tk.Tk):
         self.resizable(True, True)
 
         self.entries = {}
+        self.hcr_widgets = {}
         self.result = None
         self.last_inputs = None
 
@@ -92,6 +98,35 @@ class PSEDesignerApp(tk.Tk):
             method_frame, text="Method 1 - Adapted Terzaghi",
             variable=self.stress_method_var, value="adapted_terzaghi",
             command=self._on_method_change,
+        ).pack(side="left")
+
+        tk.Label(top_frame, text="Critical Height:").grid(row=3, column=0, sticky="w", pady=(6, 0))
+        self.hcr_method_var = tk.StringVar(value="table_10_4")
+        self.hcr_condition_var = tk.StringVar(value=METHODS[0])
+        hcr_frame = tk.Frame(top_frame)
+        hcr_frame.grid(row=3, column=1, sticky="w", pady=(6, 0))
+        tk.Radiobutton(
+            hcr_frame, text="Suggested (Table 10.4)",
+            variable=self.hcr_method_var, value="table_10_4",
+            command=self._on_hcr_method_change,
+        ).pack(side="left")
+        self.hcr_condition_combo = ttk.Combobox(
+            hcr_frame, textvariable=self.hcr_condition_var, values=METHODS,
+            state="readonly", width=30,
+        )
+        self.hcr_condition_combo.pack(side="left", padx=(8, 0))
+        self.hcr_condition_combo.bind("<<ComboboxSelected>>", lambda _event: self._on_hcr_method_change())
+        self.hcr_factor_var = tk.StringVar(value="1.4")
+        self.hcr_factor_combo = ttk.Combobox(
+            hcr_frame, textvariable=self.hcr_factor_var,
+            values=[str(x) for x in CHEN_2008_FACTORS], state="readonly", width=5,
+        )
+        self.hcr_factor_combo.pack(side="left", padx=(8, 0))
+        self.hcr_factor_combo.bind("<<ComboboxSelected>>", lambda _event: self._on_hcr_method_change())
+        tk.Radiobutton(
+            hcr_frame, text="User input",
+            variable=self.hcr_method_var, value="user_input",
+            command=self._on_hcr_method_change,
         ).pack(side="left")
         tk.Radiobutton(
             method_frame, text="Method 2 - Hewlett and Randolph",
@@ -125,6 +160,8 @@ class PSEDesignerApp(tk.Tk):
         self.notebook.add(self.details_tab, text="Calculation Details")
 
         self._build_inputs_tab()
+        self.entries["Hcr_factor"].set("1.4")
+        self.entries["a"].set("1.0")
         self._build_results_tab()
         self._build_details_tab()
 
@@ -148,6 +185,7 @@ class PSEDesignerApp(tk.Tk):
         disclaimer.pack(fill="x", padx=8, pady=(0, 6))
 
         self._on_method_change()
+        self._on_hcr_method_change()
 
     # ------------------------------------------------------------------
     def _build_inputs_tab(self):
@@ -172,6 +210,8 @@ class PSEDesignerApp(tk.Tk):
             unit_lbl = tk.Label(frame, text=unit)
             unit_lbl.grid(row=i, column=3, sticky="w", padx=6)
             self.entries[key] = var
+            if key in ("Hcr_factor", "Hcr_value", "a", "s_prime"):
+                self.hcr_widgets[key] = entry
 
             if key == "Kp":
                 self.kp_row_widgets = [lbl, sym, entry, unit_lbl]
@@ -227,6 +267,22 @@ class PSEDesignerApp(tk.Tk):
             except tk.TclError:
                 pass
 
+    def _on_hcr_method_change(self):
+        suggested = self.hcr_method_var.get() == "table_10_4"
+        state = "normal" if not suggested else "disabled"
+        self.hcr_widgets["Hcr_value"].config(state=state)
+        self.hcr_widgets["Hcr_factor"].config(state="disabled")
+        self.hcr_widgets["a"].config(state="normal" if suggested and self.hcr_condition_var.get() != METHODS[5] else "disabled")
+        self.hcr_widgets["s_prime"].config(state="normal" if suggested and self.hcr_condition_var.get() == METHODS[5] else "disabled")
+        self.hcr_condition_combo.config(state="readonly" if suggested else "disabled")
+        self.hcr_factor_combo.config(
+            state="readonly" if suggested and self.hcr_condition_var.get() in METHODS[2:4] else "disabled",
+            values=[str(x) for x in (
+                CHEN_2008_FACTORS if self.hcr_condition_var.get() == METHODS[2]
+                else CHEN_2010_FACTORS
+            )],
+        )
+
     # ------------------------------------------------------------------
     def _load_example(self):
         for key, val in EXAMPLE_VALUES.items():
@@ -235,13 +291,18 @@ class PSEDesignerApp(tk.Tk):
         self.project_name_var.set("Design Example 10.3 (source PDF)")
         self.stress_method_var.set("adapted_terzaghi")
         self.strain_method_var.set("giroud")
+        self.hcr_method_var.set("table_10_4")
+        self.hcr_condition_var.set(METHODS[0])
         self._on_method_change()
-        messagebox.showinfo("Example Loaded", "Worked example values from the source PDF have been loaded.")
+        self._on_hcr_method_change()
 
     # ------------------------------------------------------------------
     def _clear(self):
         for var in self.entries.values():
             var.set("")
+        self.entries["Hcr_factor"].set("1.4")
+        self.hcr_method_var.set("table_10_4")
+        self._on_hcr_method_change()
         self.project_name_var.set("Untitled Project")
         self.results_text.config(state="normal")
         self.results_text.delete("1.0", "end")
@@ -260,6 +321,8 @@ class PSEDesignerApp(tk.Tk):
         stress_method = self.stress_method_var.get()
 
         for key, label, symbol, unit in FIELD_LABELS:
+            if key in ("Hcr_factor", "Hcr_value", "a", "s_prime"):
+                continue
             raw = self.entries[key].get().strip()
 
             if key == "Kp" and stress_method != "hewlett_randolph":
@@ -280,6 +343,22 @@ class PSEDesignerApp(tk.Tk):
             except ValueError:
                 raise ValidationError(f"{label} ({symbol}) must be a number.")
 
+        values["Hcr_method"] = self.hcr_method_var.get()
+        values["Hcr_condition"] = self.hcr_condition_var.get()
+        values["Hcr_factor"] = float(self.hcr_factor_var.get())
+        for key in ("Hcr_value", "a", "s_prime"):
+            raw = self.entries[key].get().strip()
+            if values["Hcr_method"] == "user_input" and key == "Hcr_value":
+                if not raw:
+                    raise ValidationError("Critical height (Hcr) must be entered.")
+                values[key] = float(raw)
+            elif values["Hcr_method"] == "table_10_4" and key in ("a", "s_prime"):
+                required = key == "a" and values["Hcr_condition"] != METHODS[5] or key == "s_prime" and values["Hcr_condition"] == METHODS[5]
+                values[key] = float(raw) if raw else None
+                if required and values[key] is None:
+                    raise ValidationError(f"{key} must be entered for the selected critical-height condition.")
+            else:
+                values[key] = None
         return values
 
     # ------------------------------------------------------------------
@@ -288,7 +367,10 @@ class PSEDesignerApp(tk.Tk):
             inputs = self._parse_inputs()
             stress_method = self.stress_method_var.get()
             strain_method = self.strain_method_var.get()
-            result = run_design(inputs, stress_method=stress_method, strain_method=strain_method)
+            result = run_design(
+                inputs, stress_method=stress_method, strain_method=strain_method,
+                hcr_method=inputs["Hcr_method"],
+            )
         except ValidationError as e:
             messagebox.showerror("Input Error", str(e))
             return
@@ -317,6 +399,20 @@ class PSEDesignerApp(tk.Tk):
         lines.append(f"Method Used: {result['stress_method']}")
         lines.append(f"Strain Method Used: {result['strain_method']}")
         lines.append("")
+        critical = result["critical_height_result"]
+        lines.append("APPLIED CRITICAL HEIGHT CONDITION")
+        lines.append(f"Reference: {critical['reference']}")
+        lines.append(f"Equation: {critical['formula']}")
+        lines.append(f"Embankment Height H: {self.last_inputs['H']:.3f} m")
+        lines.append(f"Critical Height Hcr: {critical['hcr']:.3f} m")
+        lines.append(
+            "STATUS: " + (
+                "Critical height condition is satisfied."
+                if self.last_inputs["H"] >= critical["hcr"]
+                else "Critical height condition is not reached."
+            )
+        )
+        lines.append("")
         lines.append(f"Equivalent column width, a:              {result['a']:.4f} m")
         if "Hcr" in result["stress_result"]:
             lines.append(f"Critical height, Hcr:                    {result['stress_result']['Hcr']:.4f} m")
@@ -343,10 +439,18 @@ class PSEDesignerApp(tk.Tk):
     # ------------------------------------------------------------------
     def _display_details(self, result):
         lines = []
+        critical = result["critical_height_result"]
+        lines.extend([
+            "TABLE 10.4 CRITICAL HEIGHT CALCULATION", "",
+            f"Reference: {critical['reference']}",
+            f"Equation: {critical['formula']}",
+        ])
+        for key, value in critical["inputs"].items():
+            lines.append(f"{key} = {value} m")
+        lines.extend([f"Applied Critical Height: {critical['hcr']:.4f} m", ""])
         for i, step in enumerate(result["all_steps"], start=1):
             lines.append(f"{i}. {step['title'].upper()}")
             lines.append("")
-            lines.append(f"Source: {step['source']}")
             lines.append(f"Equation:")
             lines.append(f"  {step['equation']}")
             lines.append("")

@@ -19,6 +19,7 @@ per the requested architecture (separate module per method).
 
 from validation import validate_common_inputs, validate_hewlett_randolph_inputs, ValidationError
 from methods import adapted_terzaghi, hewlett_randolph
+from methods import critical_height_conditions
 from strain_methods import giroud, catenary
 import foundation
 import tension as tension_module
@@ -45,7 +46,10 @@ def modulus_ratio_check(Ec, Es):
     return m, fully_mobilized
 
 
-def run_design(inputs, stress_method="adapted_terzaghi", strain_method="giroud"):
+def run_design(
+    inputs, stress_method="adapted_terzaghi", strain_method="giroud",
+    hcr_method="table_10_4",
+):
     """
     inputs: dict of raw float inputs (already parsed from the GUI), keys:
         H, H1, gamma1, gamma2, phi1, phi2, K1, K2, d, s, p,
@@ -64,6 +68,12 @@ def run_design(inputs, stress_method="adapted_terzaghi", strain_method="giroud")
         all_steps (flattened ordered list for Calculation Details display)
     """
     all_steps = []
+    inputs = dict(inputs)
+    inputs.setdefault("Hcr_method", hcr_method)
+    inputs.setdefault("Hcr_condition", critical_height_conditions.METHODS[0])
+    inputs.setdefault("Hcr_factor", 1.4)
+    inputs.setdefault("Hcr_value", None)
+    hcr_method = inputs["Hcr_method"]
 
     # --- Step 0: validate ---
     validate_common_inputs(inputs)
@@ -92,7 +102,24 @@ def run_design(inputs, stress_method="adapted_terzaghi", strain_method="giroud")
 
     # --- Step 2: stress method ---
     if stress_method == "adapted_terzaghi":
-        stress_result = adapted_terzaghi.run(inputs)
+        if hcr_method == "user_input":
+            hcr_result = {
+                "reference": "User input",
+                "formula": "Hcr = user-entered value",
+                "factor": None,
+                "hcr": inputs["Hcr_value"],
+                "inputs": {"H": inputs["H"]},
+            }
+        else:
+            hcr_result = critical_height_conditions.calculate(
+                inputs["Hcr_condition"],
+                s=inputs["s"], a=inputs["a"], d=inputs["d"],
+                s_prime=inputs.get("s_prime"),
+                factor=inputs.get("Hcr_factor"),
+            )
+        stress_inputs = dict(inputs)
+        stress_inputs["Hcr_value"] = hcr_result["hcr"]
+        stress_result = adapted_terzaghi.run(stress_inputs, "user_input")
     elif stress_method == "hewlett_randolph":
         hr_inputs = dict(inputs)
         # Hewlett & Randolph uses a single embankment unit weight (gamma_e)
@@ -164,6 +191,7 @@ def run_design(inputs, stress_method="adapted_terzaghi", strain_method="giroud")
         "arching_ok": arching_ok,
         "stress_method": stress_result["method"],
         "stress_result": stress_result,
+        "critical_height_result": hcr_result,
         "foundation_result": foundation_result,
         "strain_method": strain_result["method"],
         "strain_result": strain_result,

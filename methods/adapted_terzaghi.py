@@ -26,17 +26,6 @@ def equivalent_column_width(d):
     return math.sqrt(math.pi * d ** 2 / 4)
 
 
-def critical_height(s, a):
-    """
-    Hcr >= 1.4(s - a)
-    Source: supplied PDF, p.356, "The criterion, Hcr >= 1.4(s-a), has been
-    commonly used in practice." Table 10.4 (British Standard BS8006, 2010).
-    Program uses the equality Hcr = 1.4(s-a) to obtain a numeric estimate,
-    consistent with the worked example on p.363 step 2.
-    """
-    return 1.4 * (s - a)
-
-
 def alpha_terms(a, K1, phi1_deg, K2, phi2_deg, s):
     """
     alpha1 = 4*a*K1*tan(phi1) / (s^2 - a^2)
@@ -110,7 +99,7 @@ def H2_placeholder(H, H1):
     return H - H1
 
 
-def run(inputs):
+def run(inputs, hcr_method="table_10_4"):
     """
     Full adapted-Terzaghi calculation chain.
     inputs: dict with keys H, H1, gamma1, gamma2, phi1, phi2, K1, K2, d, s, p
@@ -131,12 +120,21 @@ def run(inputs):
         "source": "Supplied PDF, p.363, worked calculation step 1",
     })
 
-    Hcr = critical_height(inputs["s"], a)
+    if hcr_method == "user_input":
+        Hcr = inputs["Hcr_value"]
+        hcr_equation = "H_cr = user-entered value"
+    else:
+        Hcr = inputs["Hcr_value"]
+        hcr_equation = "H_cr = selected Table 10.4 condition"
     steps.append({
         "title": "Critical height",
         "symbol": "H_cr",
-        "equation": "H_cr = 1.4 (s - a)",
-        "substitution": f"H_cr = 1.4 ({inputs['s']} - {a:.4f})",
+        "equation": hcr_equation,
+        "substitution": (
+            f"H_cr = {inputs['Hcr_factor']} ({inputs['s']} - {a:.4f})"
+            if hcr_method == "table_10_4"
+            else f"H_cr = {Hcr:.4f} m"
+        ),
         "result": Hcr,
         "unit": "m",
         "source": "Supplied PDF, p.356, Table 10.4 criterion; p.363 step 2",
