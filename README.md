@@ -21,11 +21,20 @@ The program works offline and does not need an internet connection after it has 
 1. Enter a project or design name.
 2. Choose a design method.
 3. Choose a strain method.
-4. Enter the project values in the **Inputs** tab.
-5. Select **Calculate**.
-6. Review the results and design checks.
-7. Open **Calculation Details** to review the equations and substitutions.
-8. Select **Save Report** to save a text copy of the calculation sheet.
+4. Choose the **Critical Height** mode:
+   - **Suggested (Table 10.4)** to select a published condition; or
+   - **User input** to enter Hcr directly.
+5. If using a suggested condition, choose the applicable reference:
+   Hewlett and Randolph (1988), Han and Gabr (2002), Chen et al. (2008a),
+   Chen et al. (2010), British Standard BS8006 (2010), or Filz et al. (2015).
+6. Enter the project values in the **Inputs** tab. Enter the square column
+   width `a` for spacing-based conditions, or `s'` for the Filz condition.
+7. Select **Calculate**.
+8. Review the applied critical-height condition, H/Hcr comparison, results,
+   and design checks.
+9. Open **Calculation Details** to review the reference, equation, inputs,
+   and substitutions.
+10. Select **Save Report** to save a text copy of the calculation sheet.
 
 If you are trying the program for the first time, select **Load Example**. This fills the form with a complete example so you can see how the application works.
 
@@ -45,6 +54,8 @@ When the Hewlett and Randolph method is selected, enter the `Kp` value requested
 
 The **Results** tab reports the main design values, including:
 
+- The selected Table 10.4 critical-height reference and equation.
+- The calculated critical height Hcr and comparison with embankment height H.
 - Equivalent column width.
 - Vertical stress above the geosynthetic.
 - Foundation soil resistance.
@@ -85,10 +96,14 @@ py -3 -m PyInstaller --onefile --windowed --name Pile_Supported_Embankment_Desig
 ```
 
 The new executable will be placed in `dist\Pile_Supported_Embankment_Designer.exe`.
+The imported `methods\critical_height_conditions.py` module is included
+automatically by PyInstaller.
 
 ## Project files
 
 - [`standalone_app.py`](standalone_app.py): complete single-file application.
+- [`methods/critical_height_conditions.py`](methods/critical_height_conditions.py):
+  independent Table 10.4 critical-height formulas and validation.
 - [`run_project.bat`](run_project.bat): Windows launch file for the source version.
 - [`dist/`](dist/): downloadable Windows executable.
 - [`worked_example_test.py`](worked_example_test.py): calculation check for the example values.

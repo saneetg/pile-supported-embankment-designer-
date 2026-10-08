@@ -96,7 +96,6 @@ There are therefore two versions of the application in the project:
 | File | What it does |
 |---|---|
 | `methods/adapted_terzaghi.py` | Implements the Adapted Terzaghi method. It calculates an equivalent column width, critical height, arching coefficients, and vertical stress above the geosynthetic. It automatically selects the relevant height case. |
-| `methods/critical_height.py` | Calculates Hcr either from the Table 10.4 factor and column spacing/width or from a user-entered critical height. |
 | `methods/critical_height_conditions.py` | Provides the six selectable Table 10.4 critical-height conditions, including Chen factor ranges and Filz inputs. |
 | `methods/hewlett_randolph.py` | Implements the Hewlett and Randolph method. It calculates stress at the crown of the soil arch and at the top of the column, then uses the greater value. This method needs the additional `Kp` value. |
 | `methods/__init__.py` | Marks `methods` as a Python package so its calculation modules can be imported together. |
