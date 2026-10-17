@@ -70,7 +70,7 @@ def run_design(
     all_steps = []
     inputs = dict(inputs)
     inputs.setdefault("Hcr_method", hcr_method)
-    inputs.setdefault("Hcr_condition", critical_height_conditions.METHODS[0])
+    inputs.setdefault("Hcr_condition", critical_height_conditions.METHODS[4])
     inputs.setdefault("Hcr_factor", 1.4)
     inputs.setdefault("Hcr_value", None)
     hcr_method = inputs["Hcr_method"]
@@ -101,6 +101,7 @@ def run_design(
         )
 
     # --- Step 2: stress method ---
+    calculated_a = adapted_terzaghi.equivalent_column_width(inputs["d"])
     if stress_method == "adapted_terzaghi":
         if hcr_method == "user_input":
             hcr_result = {
@@ -113,13 +114,13 @@ def run_design(
         else:
             hcr_result = critical_height_conditions.calculate(
                 inputs["Hcr_condition"],
-                s=inputs["s"], a=inputs["a"], d=inputs["d"],
+                s=inputs["s"], a=calculated_a, d=inputs["d"],
                 s_prime=inputs.get("s_prime"),
                 factor=inputs.get("Hcr_factor"),
             )
         stress_inputs = dict(inputs)
         stress_inputs["Hcr_value"] = hcr_result["hcr"]
-        stress_result = adapted_terzaghi.run(stress_inputs, "user_input")
+        stress_result = adapted_terzaghi.run(stress_inputs, hcr_method)
     elif stress_method == "hewlett_randolph":
         hr_inputs = dict(inputs)
         # Hewlett & Randolph uses a single embankment unit weight (gamma_e)

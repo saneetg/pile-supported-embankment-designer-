@@ -36,7 +36,12 @@ def run(inputs):
             "epsilon_g = 0.5*sqrt(1+16 dS_g^2/(s-a)^2) + "
             "(s-a)/(8 dS_g) * ln(4 dS_g/(s-a) + sqrt(1+16 dS_g^2/(s-a)^2)) - 1"
         ),
-        "substitution": f"dS_g={inputs['dS_g']}, s={inputs['s']}, a={inputs['a']:.4f}",
+        "substitution": (
+            f"span = s-a = {inputs['s']}-{inputs['a']:.4f}; "
+            f"ratio = dS_g/span = {inputs['dS_g']}/{inputs['s']-inputs['a']:.4f}; "
+            f"epsilon_g = 0.5*sqrt(1+16*ratio^2) + "
+            f"span/(8*dS_g)*ln(4*ratio+sqrt(1+16*ratio^2)) - 1 = {eps:.6f}"
+        ),
         "result": eps,
         "unit": "(fraction; multiply by 100 for %)",
         "source": "Supplied PDF, p.361, Eq. (10.23) (John, 1987)",

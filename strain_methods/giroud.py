@@ -29,7 +29,11 @@ def run(inputs):
         "title": "Tensile strain in geosynthetic (Giroud simplified formula)",
         "symbol": "epsilon_g",
         "equation": "epsilon_g = 8 * dS_g^2 / (3 * (s - a)^2)",
-        "substitution": f"epsilon_g = 8*({inputs['dS_g']})^2 / (3*({inputs['s']}-{inputs['a']:.4f})^2)",
+        "substitution": (
+            f"Condition: dS_g/(s-a) is within the simplified Giroud range; "
+            f"epsilon_g = 8*({inputs['dS_g']})^2 / "
+            f"(3*({inputs['s']}-{inputs['a']:.4f})^2) = {eps:.6f}"
+        ),
         "result": eps,
         "unit": "(fraction; multiply by 100 for %)",
         "source": "Supplied PDF, p.361, Eq. (10.26)",

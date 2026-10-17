@@ -50,9 +50,9 @@ def vertical_stress(H, H1, Hcr, gamma1, gamma2, alpha1, alpha2, p):
     Case B: H1 < Hcr < H                -> Eq. (10.19)
     Case C: Hcr < H1  (Hcr within platform) -> Eq. (10.20)
 
-    Returns (psl, case_label, equation_ref)
+    Returns (psl, case_label, equation_ref, substitution)
     """
-    if Hcr > H:
+    if Hcr >= H:
         # Source: supplied PDF, p.359, Eq. (10.18)
         psl = (
             (gamma1 / alpha1) * (1 - math.exp(-alpha1 * H1))
@@ -65,6 +65,13 @@ def vertical_stress(H, H1, Hcr, gamma1, gamma2, alpha1, alpha2, p):
         # branch is not exercised by the mandatory validation test.
         case_label = "Hcr > H"
         eq_ref = "Eq. (10.18), supplied PDF p.359"
+        substitution = (
+            f"Condition applied: Hcr ({Hcr:.4f}) > H ({H:.4f}); "
+            f"psl = ({gamma1}/{alpha1:.4f})[1-exp(-{alpha1:.4f}*{H1})] + "
+            f"({gamma2}/{alpha2:.4f})exp(-{alpha1:.4f}*{H1})"
+            f"[1-exp(-{alpha2:.4f}*{H1})] + "
+            f"{p}exp(-{alpha1:.4f}*{H1}-{alpha2:.4f}*{H1})"
+        )
 
     elif H1 < Hcr < H:
         # Source: supplied PDF, p.360, Eq. (10.19)
@@ -76,6 +83,14 @@ def vertical_stress(H, H1, Hcr, gamma1, gamma2, alpha1, alpha2, p):
         )
         case_label = "H1 < Hcr < H"
         eq_ref = "Eq. (10.19), supplied PDF p.360"
+        substitution = (
+            f"Condition applied: H1 ({H1:.4f}) < Hcr ({Hcr:.4f}) < H ({H:.4f}); "
+            f"psl = ({gamma1}/{alpha1:.4f})[1-exp(-{alpha1:.4f}*{H1})] + "
+            f"({gamma2}/{alpha2:.4f})exp(-{alpha1:.4f}*{H1})"
+            f"[1-exp(-{alpha2:.4f}*({Hcr:.4f}-{H1}))] + "
+            f"({p}+({H:.4f}-{Hcr:.4f})*{gamma2})"
+            f"exp(-{alpha1:.4f}*{H1}-{alpha2:.4f}*({Hcr:.4f}-{H1}))"
+        )
 
     else:
         # Hcr <= H1 : Source: supplied PDF, p.360, Eq. (10.20)
@@ -86,8 +101,14 @@ def vertical_stress(H, H1, Hcr, gamma1, gamma2, alpha1, alpha2, p):
         )
         case_label = "Hcr <= H1 (within platform)"
         eq_ref = "Eq. (10.20), supplied PDF p.360"
+        substitution = (
+            f"Condition applied: Hcr ({Hcr:.4f}) <= H1 ({H1:.4f}); "
+            f"psl = ({gamma1}/{alpha1:.4f})[1-exp(-{alpha1:.4f}*{Hcr:.4f})] + "
+            f"({p}+({H1:.4f}-{Hcr:.4f})*{gamma1}+({H:.4f}-{H1})*{gamma2})"
+            f"exp(-{alpha1:.4f}*{Hcr:.4f})"
+        )
 
-    return psl, case_label, eq_ref
+    return psl, case_label, eq_ref, substitution
 
 
 def H2_placeholder(H, H1):
@@ -125,13 +146,14 @@ def run(inputs, hcr_method="table_10_4"):
         hcr_equation = "H_cr = user-entered value"
     else:
         Hcr = inputs["Hcr_value"]
-        hcr_equation = "H_cr = selected Table 10.4 condition"
+        hcr_equation = inputs.get("Hcr_condition", "selected Table 10.4 condition")
     steps.append({
         "title": "Critical height",
         "symbol": "H_cr",
         "equation": hcr_equation,
         "substitution": (
-            f"H_cr = {inputs['Hcr_factor']} ({inputs['s']} - {a:.4f})"
+            f"Condition: {hcr_equation}; H_cr = {inputs['Hcr_factor']} "
+            f"* ({inputs['s']} - {a:.4f}) = {Hcr:.4f} m"
             if hcr_method == "table_10_4"
             else f"H_cr = {Hcr:.4f} m"
         ),
@@ -168,7 +190,7 @@ def run(inputs, hcr_method="table_10_4"):
         "source": "Supplied PDF, p.359, Eq. (10.18) definitions",
     })
 
-    psl, case_label, eq_ref = vertical_stress(
+    psl, case_label, eq_ref, psl_substitution = vertical_stress(
         inputs["H"], inputs["H1"], Hcr,
         inputs["gamma1"], inputs["gamma2"], alpha1, alpha2, inputs["p"]
     )
@@ -176,7 +198,7 @@ def run(inputs, hcr_method="table_10_4"):
         "title": f"Average vertical stress above geosynthetic ({case_label})",
         "symbol": "p_sl",
         "equation": eq_ref,
-        "substitution": "See equation; case selected automatically from H_cr vs H1, H",
+        "substitution": psl_substitution,
         "result": psl,
         "unit": "kPa",
         "source": eq_ref,

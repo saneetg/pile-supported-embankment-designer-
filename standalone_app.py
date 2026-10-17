@@ -70,8 +70,6 @@ def validate_inputs(values, stress_method):
         require_positive(values.get("Hcr_value"), "Critical height (Hcr)")
     elif values.get("Hcr_condition") == "Filz et al. (2015)":
         require_positive(values.get("s_prime"), "Distance s'")
-    else:
-        require_positive(values.get("a"), "Square column width (a)")
 
 
 def step(title, symbol, equation, substitution, result, unit, source):
@@ -89,7 +87,7 @@ def adapted_terzaghi(values):
         hcr = values["Hcr_value"]
         hcr_equation = "H_cr = user-entered value"
     else:
-        critical = calculate_hcr_condition(values["Hcr_condition"], s=s, a=values["a"], d=values["d"], s_prime=values.get("s_prime"), factor=values.get("Hcr_factor"))
+        critical = calculate_hcr_condition(values["Hcr_condition"], s=s, a=a, d=values["d"], s_prime=values.get("s_prime"), factor=values.get("Hcr_factor"))
         hcr = critical["hcr"]
         hcr_equation = critical["formula"]
     denominator = s ** 2 - a ** 2
@@ -101,7 +99,7 @@ def adapted_terzaghi(values):
         psl = ((gamma1 / alpha1) * (1 - math.exp(-alpha1 * h1))
                + (gamma2 / alpha2) * math.exp(-alpha1 * h1) * (1 - math.exp(-alpha2 * h1))
                + surcharge * math.exp(-alpha1 * h1 - alpha2 * h1))
-        case = "Hcr > H"
+        case = "Hcr >= H"
         equation = "Engineering reference Eq. (10.18)"
     elif h1 < hcr < h:
         psl = ((gamma1 / alpha1) * (1 - math.exp(-alpha1 * h1))
@@ -116,10 +114,20 @@ def adapted_terzaghi(values):
         equation = "Engineering reference Eq. (10.20)"
     steps = [
         step("Equivalent column width", "a", "a = sqrt(pi * d^2 / 4)", f"a = sqrt(pi * {d}^2 / 4)", a, "m", "Engineering reference: equivalent circular-column geometry"),
-        step("Critical height", "H_cr", hcr_equation, f"H_cr = {hcr:.4f} m", hcr, "m", "Table 10.4 critical-height selection"),
+        step("Critical height", "H_cr", hcr_equation, (
+            f"Condition: {values['Hcr_condition']}; "
+            f"H_cr = {values.get('Hcr_factor', 1.4)}*({s}-{a:.4f}) = {hcr:.4f} m"
+            if values["Hcr_method"] == "table_10_4"
+            else f"Condition: user input; H_cr = {hcr:.4f} m"
+        ), hcr, "m", "Table 10.4 critical-height selection"),
         step("Alpha 1 (platform fill arching coefficient)", "alpha_1", "alpha_1 = 4 a K1 tan(phi1) / (s^2 - a^2)", f"alpha_1 = 4({a:.4f})({values['K1']})tan({values['phi1']} deg) / ({s}^2 - {a:.4f}^2)", alpha1, "1/m", "Engineering reference: arching coefficient definition"),
         step("Alpha 2 (embankment fill arching coefficient)", "alpha_2", "alpha_2 = 4 a K2 tan(phi2) / (s^2 - a^2)", f"alpha_2 = 4({a:.4f})({values['K2']})tan({values['phi2']} deg) / ({s}^2 - {a:.4f}^2)", alpha2, "1/m", "Engineering reference: arching coefficient definition"),
-        step(f"Average vertical stress above geosynthetic ({case})", "p_sl", equation, "See equation; case selected automatically from H_cr vs H1, H", psl, "kPa", equation),
+        step(f"Average vertical stress above geosynthetic ({case})", "p_sl", equation, (
+            f"Condition applied: {case}; "
+            f"psl calculated from the corresponding equation using "
+            f"H={h:.4f}, H1={h1:.4f}, Hcr={hcr:.4f}, "
+            f"alpha1={alpha1:.4f}, alpha2={alpha2:.4f}"
+        ), psl, "kPa", equation),
     ]
     return {"method": "Adapted Terzaghi", "a": a, "Hcr": hcr, "alpha1": alpha1, "alpha2": alpha2, "psl": psl, "steps": steps}
 
@@ -135,9 +143,22 @@ def hewlett_randolph(values):
     psl = max(crown, top)
     steps = [
         step("Equivalent column width", "a", "a = sqrt(pi * d^2 / 4)", f"a = sqrt(pi * {values['d']}^2 / 4)", a, "m", "Engineering reference: equivalent circular-column geometry"),
-        step("Vertical stress at crown of arch", "p_sl (crown)", "Engineering reference Eq. (10.21)", "See governing arch-crown equation", crown, "kPa", "Engineering reference: arch-crown stress method"),
-        step("Vertical stress at top of column", "p_sl (column top)", "Engineering reference Eq. (10.22)", "See governing column-top equation", top, "kPa", "Engineering reference: column-top stress method"),
-        step("Governing vertical stress above geosynthetic", "p_sl", "p_sl = max(p_sl(crown), p_sl(column top))", f"p_sl = max({crown:.3f}, {top:.3f})", psl, "kPa", "Engineering criterion: governing arching stress"),
+        step("Vertical stress at crown of arch", "p_sl (crown)", "Engineering reference Eq. (10.21)", (
+            f"p_sl(crown) = ({gamma}*{h}+{surcharge}) * "
+            f"[(1-{a:.4f}/{s})^(2*({kp}-1)) * "
+            f"(1-{s}/(sqrt(2)*{h})*((2*{kp}-2)/(2*{kp}-3))) + "
+            f"({s}-{a:.4f})/(sqrt(2)*{h})*((2*{kp}-2)/(2*{kp}-3))]"
+        ), crown, "kPa", "Engineering reference: arch-crown stress method"),
+        step("Vertical stress at top of column", "p_sl (column top)", "Engineering reference Eq. (10.22)", (
+            f"p_sl(top) = ({gamma}*{h}+{surcharge}) / "
+            f"[(2*{kp}/({kp}+1))*((1-{a:.4f}/{s})^(1-{kp}) - "
+            f"(1-{a:.4f}/{s})*(1+({a:.4f}/{s})*{kp})) + "
+            f"(1-{a:.4f}^2/{s}^2)]"
+        ), top, "kPa", "Engineering reference: column-top stress method"),
+        step("Governing vertical stress above geosynthetic", "p_sl", "p_sl = max(p_sl(crown), p_sl(column top))", (
+            f"Condition applied: select greater value; "
+            f"p_sl = max({crown:.3f}, {top:.3f}) = {psl:.3f} kPa"
+        ), psl, "kPa", "Engineering criterion: governing arching stress"),
     ]
     return {"method": "Hewlett and Randolph", "a": a, "psl": psl, "psl_crown": crown, "psl_top": top, "steps": steps}
 
@@ -145,7 +166,7 @@ def hewlett_randolph(values):
 def run_design(values, stress_method="adapted_terzaghi", strain_method="giroud"):
     values = dict(values)
     values.setdefault("Hcr_method", "table_10_4")
-    values.setdefault("Hcr_condition", METHODS[0])
+    values.setdefault("Hcr_condition", METHODS[4])
     values.setdefault("Hcr_factor", 1.4)
     values.setdefault("Hcr_value", None)
     validate_inputs(values, stress_method)
@@ -162,7 +183,7 @@ def run_design(values, stress_method="adapted_terzaghi", strain_method="giroud")
     if values["Hcr_method"] == "user_input":
         critical = {"reference": "User input", "formula": "Hcr = user-entered value", "hcr": values["Hcr_value"], "inputs": {"H": values["H"]}}
     else:
-        critical = calculate_hcr_condition(values["Hcr_condition"], s=values["s"], a=values["a"], d=values["d"], s_prime=values.get("s_prime"), factor=values.get("Hcr_factor"))
+        critical = calculate_hcr_condition(values["Hcr_condition"], s=values["s"], a=a, d=values["d"], s_prime=values.get("s_prime"), factor=values.get("Hcr_factor"))
     h2 = values["H"] - values["H1"]
     dsigma = (values["gamma1"] * values["H1"] + values["gamma2"] * h2) / (1 + (a ** 2 / values["s"] ** 2) * (values["n"] - 1))
     q_ult = 5.14 * values["cu"]
@@ -210,8 +231,8 @@ def build_report(project_name, values, result):
     return "\n".join(lines)
 
 
-EXAMPLE_VALUES = {"H": "5.0", "H1": "0.60", "gamma1": "20.0", "gamma2": "18.0", "phi1": "38.0", "phi2": "30.0", "K1": "0.75", "K2": "0.75", "d": "1.0", "s": "2.5", "p": "13.0", "Ec": "1000.0", "Es": "4.0", "cu": "20.0", "FS": "2.0", "n": "25", "dS_allow": "0.15", "Kp": "", "Hcr_factor": "1.4", "Hcr_value": "", "a": "1.0", "s_prime": ""}
-FIELD_LABELS = [("H", "Embankment height", "H", "m"), ("gamma2", "Embankment fill unit weight", "gamma2", "kN/m3"), ("phi2", "Embankment fill friction angle", "phi2", "deg"), ("H1", "Load transfer platform thickness", "H1", "m"), ("gamma1", "Platform fill unit weight", "gamma1", "kN/m3"), ("phi1", "Platform fill friction angle", "phi1", "deg"), ("K1", "Platform lateral earth pressure coeff.", "K1", ""), ("K2", "Embankment lateral earth pressure coeff.", "K2", ""), ("d", "Column diameter", "d", "m"), ("s", "Column spacing (center to center)", "s", "m"), ("Ec", "Column (concrete) modulus", "Ec", "MPa"), ("Es", "Soft soil modulus", "Es", "MPa"), ("cu", "Undrained shear strength of soft soil", "cu", "kPa"), ("n", "Stress concentration ratio (n)", "n", ""), ("FS", "Factor of safety (bearing check)", "FS", ""), ("p", "Surcharge on embankment", "p", "kPa"), ("dS_allow", "Allowable differential settlement", "dS", "m"), ("Kp", "Passive earth pressure coeff. (Hewlett & Randolph only)", "Kp", ""), ("Hcr_factor", "Table 10.4 critical-height factor", "factor", ""), ("Hcr_value", "User-entered critical height", "Hcr", "m"), ("a", "Square column width", "a", "m"), ("s_prime", "Distance from column edge to array centroid", "s'", "m")]
+EXAMPLE_VALUES = {"H": "5.0", "H1": "0.60", "gamma1": "20.0", "gamma2": "18.0", "phi1": "38.0", "phi2": "30.0", "K1": "0.75", "K2": "0.75", "d": "1.0", "s": "2.5", "p": "13.0", "Ec": "1000.0", "Es": "4.0", "cu": "20.0", "FS": "2.0", "n": "25", "dS_allow": "0.15", "Kp": "", "Hcr_factor": "1.4", "Hcr_value": "", "s_prime": ""}
+FIELD_LABELS = [("H", "Embankment height", "H", "m"), ("gamma2", "Embankment fill unit weight", "gamma2", "kN/m3"), ("phi2", "Embankment fill friction angle", "phi2", "deg"), ("H1", "Load transfer platform thickness", "H1", "m"), ("gamma1", "Platform fill unit weight", "gamma1", "kN/m3"), ("phi1", "Platform fill friction angle", "phi1", "deg"), ("K1", "Platform lateral earth pressure coefficient", "K1", ""), ("K2", "Embankment lateral earth pressure coefficient", "K2", ""), ("d", "Column diameter", "d", "m"), ("s", "Column spacing (center to center)", "s", "m"), ("Ec", "Column (concrete) modulus", "Ec", "MPa"), ("Es", "Soft soil modulus", "Es", "MPa"), ("cu", "Undrained shear strength of soft soil", "cu", "kPa"), ("n", "Stress concentration ratio (n)", "n", ""), ("FS", "Factor of safety (bearing check)", "FS", ""), ("p", "Surcharge on embankment", "p", "kPa"), ("dS_allow", "Allowable differential settlement", "dS", "m"), ("Kp", "Passive earth pressure coeff. (Hewlett & Randolph only)", "Kp", ""), ("Hcr_factor", "Table 10.4 critical-height factor", "factor", ""), ("Hcr_value", "User-entered critical height", "Hcr", "m"), ("s_prime", "Distance from column edge to array centroid", "s'", "m")]
 
 
 class PSEDesignerApp(tk.Tk):
@@ -243,7 +264,7 @@ class PSEDesignerApp(tk.Tk):
         self.hcr_method_var = tk.StringVar(value="table_10_4")
         tk.Radiobutton(top, text="Suggested (Table 10.4)", variable=self.hcr_method_var, value="table_10_4", command=self._hcr_changed).grid(row=3, column=1, sticky="w")
         tk.Radiobutton(top, text="User input", variable=self.hcr_method_var, value="user_input", command=self._hcr_changed).grid(row=3, column=2, sticky="w")
-        self.hcr_condition_var = tk.StringVar(value=METHODS[0])
+        self.hcr_condition_var = tk.StringVar(value=METHODS[4])
         self.hcr_condition_combo = ttk.Combobox(top, textvariable=self.hcr_condition_var, values=METHODS, state="readonly", width=30)
         self.hcr_condition_combo.grid(row=3, column=3, sticky="w")
         self.hcr_factor_var = tk.StringVar(value="1.4")
@@ -308,7 +329,6 @@ class PSEDesignerApp(tk.Tk):
         )
         self.hcr_condition_combo.config(state="readonly" if suggested else "disabled")
         self.hcr_factor_combo.config(state="readonly" if suggested and self.hcr_condition_var.get() in METHODS[2:4] else "disabled")
-        self.hcr_widgets["a"].config(state="normal" if suggested and self.hcr_condition_var.get() != METHODS[5] else "disabled")
         self.hcr_widgets["s_prime"].config(state="normal" if suggested and self.hcr_condition_var.get() == METHODS[5] else "disabled")
 
     def _load_example(self):
@@ -317,7 +337,7 @@ class PSEDesignerApp(tk.Tk):
         self.project_name_var.set("Design Example 10.3")
         self._method_changed()
         self.hcr_method_var.set("table_10_4")
-        self.hcr_condition_var.set(METHODS[0])
+        self.hcr_condition_var.set(METHODS[4])
         self._hcr_changed()
 
     def _clear(self):
@@ -333,7 +353,7 @@ class PSEDesignerApp(tk.Tk):
     def _parse_inputs(self):
         values = {}
         for key, label, symbol, _unit in FIELD_LABELS:
-            if key in ("Hcr_factor", "Hcr_value", "a", "s_prime"):
+            if key in ("Hcr_factor", "Hcr_value", "s_prime"):
                 continue
             raw = self.entries[key].get().strip()
             if key == "Kp" and self.stress_method_var.get() != "hewlett_randolph":
@@ -351,13 +371,13 @@ class PSEDesignerApp(tk.Tk):
         values["Hcr_method"] = self.hcr_method_var.get()
         values["Hcr_condition"] = self.hcr_condition_var.get()
         values["Hcr_factor"] = float(self.hcr_factor_var.get())
-        for key in ("Hcr_value", "a", "s_prime"):
+        for key in ("Hcr_value", "s_prime"):
             raw = self.entries[key].get().strip()
             if values["Hcr_method"] == "user_input" and key == "Hcr_value":
                 if not raw:
                     raise ValidationError("Critical height (Hcr) must be entered.")
                 values[key] = float(raw)
-            elif values["Hcr_method"] == "table_10_4" and key in ("a", "s_prime"):
+            elif values["Hcr_method"] == "table_10_4" and key == "s_prime":
                 values[key] = float(raw) if raw else None
             else:
                 values[key] = None

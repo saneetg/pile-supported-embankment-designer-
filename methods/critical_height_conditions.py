@@ -9,6 +9,7 @@ METHODS = (
     "Filz et al. (2015)",
 )
 CHEN_2008_FACTORS = (1.4, 1.5, 1.6)
+# Chen et al. (2010): Hcr >= (1.1 to 1.5)(s-a).
 CHEN_2010_FACTORS = (1.1, 1.2, 1.3, 1.4, 1.5)
 
 
@@ -78,4 +79,11 @@ def calculate(method, *, s=None, a=None, d=None, s_prime=None, factor=None):
 
 
 def _result(reference, formula, hcr, inputs, factor):
-    return {"reference": reference, "formula": formula, "factor": factor, "hcr": hcr, "inputs": inputs}
+    return {
+        "reference": reference,
+        "formula": formula,
+        "factor": factor,
+        "hcr": hcr,
+        "inputs": inputs,
+        "condition": f"{formula}; applied Hcr = {hcr:.4f} m",
+    }

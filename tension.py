@@ -43,7 +43,7 @@ def run(inputs):
         "substitution": (
             f"T_g = [({inputs['psl']:.3f}-{inputs['dsigma_s']:.3f})"
             f"({inputs['s']}^2-{inputs['a']:.4f}^2)/(4*{inputs['a']:.4f})] "
-            f"* sqrt(1 + 1/(6*{inputs['epsilon_g']:.5f}))"
+            f"* sqrt(1 + 1/(6*{inputs['epsilon_g']:.5f})) = {Tg:.3f} kN/m"
         ),
         "result": Tg,
         "unit": "kN/m",

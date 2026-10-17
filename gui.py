@@ -59,7 +59,6 @@ FIELD_LABELS = [
     ("Kp", "Passive earth pressure coeff. (Hewlett & Randolph only)", "Kp", ""),
     ("Hcr_factor", "Table 10.4 critical-height factor", "factor", ""),
     ("Hcr_value", "User-entered critical height", "Hcr", "m"),
-    ("a", "Square column width", "a", "m"),
     ("s_prime", "Distance from column edge to array centroid", "s'", "m"),
 ]
 
@@ -102,7 +101,7 @@ class PSEDesignerApp(tk.Tk):
 
         tk.Label(top_frame, text="Critical Height:").grid(row=3, column=0, sticky="w", pady=(6, 0))
         self.hcr_method_var = tk.StringVar(value="table_10_4")
-        self.hcr_condition_var = tk.StringVar(value=METHODS[0])
+        self.hcr_condition_var = tk.StringVar(value=METHODS[4])
         hcr_frame = tk.Frame(top_frame)
         hcr_frame.grid(row=3, column=1, sticky="w", pady=(6, 0))
         tk.Radiobutton(
@@ -161,7 +160,6 @@ class PSEDesignerApp(tk.Tk):
 
         self._build_inputs_tab()
         self.entries["Hcr_factor"].set("1.4")
-        self.entries["a"].set("1.0")
         self._build_results_tab()
         self._build_details_tab()
 
@@ -210,7 +208,7 @@ class PSEDesignerApp(tk.Tk):
             unit_lbl = tk.Label(frame, text=unit)
             unit_lbl.grid(row=i, column=3, sticky="w", padx=6)
             self.entries[key] = var
-            if key in ("Hcr_factor", "Hcr_value", "a", "s_prime"):
+            if key in ("Hcr_factor", "Hcr_value", "s_prime"):
                 self.hcr_widgets[key] = entry
 
             if key == "Kp":
@@ -272,7 +270,6 @@ class PSEDesignerApp(tk.Tk):
         state = "normal" if not suggested else "disabled"
         self.hcr_widgets["Hcr_value"].config(state=state)
         self.hcr_widgets["Hcr_factor"].config(state="disabled")
-        self.hcr_widgets["a"].config(state="normal" if suggested and self.hcr_condition_var.get() != METHODS[5] else "disabled")
         self.hcr_widgets["s_prime"].config(state="normal" if suggested and self.hcr_condition_var.get() == METHODS[5] else "disabled")
         self.hcr_condition_combo.config(state="readonly" if suggested else "disabled")
         self.hcr_factor_combo.config(
@@ -292,7 +289,7 @@ class PSEDesignerApp(tk.Tk):
         self.stress_method_var.set("adapted_terzaghi")
         self.strain_method_var.set("giroud")
         self.hcr_method_var.set("table_10_4")
-        self.hcr_condition_var.set(METHODS[0])
+        self.hcr_condition_var.set(METHODS[4])
         self._on_method_change()
         self._on_hcr_method_change()
 
@@ -346,14 +343,14 @@ class PSEDesignerApp(tk.Tk):
         values["Hcr_method"] = self.hcr_method_var.get()
         values["Hcr_condition"] = self.hcr_condition_var.get()
         values["Hcr_factor"] = float(self.hcr_factor_var.get())
-        for key in ("Hcr_value", "a", "s_prime"):
+        for key in ("Hcr_value", "s_prime"):
             raw = self.entries[key].get().strip()
             if values["Hcr_method"] == "user_input" and key == "Hcr_value":
                 if not raw:
                     raise ValidationError("Critical height (Hcr) must be entered.")
                 values[key] = float(raw)
-            elif values["Hcr_method"] == "table_10_4" and key in ("a", "s_prime"):
-                required = key == "a" and values["Hcr_condition"] != METHODS[5] or key == "s_prime" and values["Hcr_condition"] == METHODS[5]
+            elif values["Hcr_method"] == "table_10_4" and key == "s_prime":
+                required = values["Hcr_condition"] == METHODS[5]
                 values[key] = float(raw) if raw else None
                 if required and values[key] is None:
                     raise ValidationError(f"{key} must be entered for the selected critical-height condition.")

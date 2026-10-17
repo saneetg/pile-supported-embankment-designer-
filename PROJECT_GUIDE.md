@@ -53,8 +53,10 @@ py -3 main.py
 2. `validation.py` checks that the values are present and sensible.
 3. `calculation_engine.py` coordinates the calculation.
 4. The selected critical-height option supplies Hcr. The Table 10.4 option
-   calculates it from the entered factor and geometry; the user-input option
-   accepts Hcr directly.
+   calculates it from the selected factor and geometry, using the equivalent
+   square column width calculated from the entered column diameter; the
+   user-input option accepts Hcr directly.
+   The default suggested condition is British Standard BS8006 (2010).
 5. One stress method calculates the vertical stress above the geosynthetic:
    Adapted Terzaghi or Hewlett and Randolph.
 6. `foundation.py` calculates the foundation soil resistance and bearing check.
@@ -62,6 +64,10 @@ py -3 main.py
 8. `tension.py` calculates the required geosynthetic tension.
 9. `report.py` creates a readable text calculation sheet.
 10. The GUI shows the results and can save the report.
+
+Each calculation-detail step reports its formula, substituted values, and
+the condition or branch applied. Chen et al. (2010) is available over the
+range `Hcr >= (1.1 to 1.5)(s-a)`.
 
 ## Source files
 

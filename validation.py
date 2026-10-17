@@ -83,7 +83,6 @@ def validate_common_inputs(inp):
     if inp.get("Hcr_method") == "user_input":
         require_positive(inp.get("Hcr_value"), "Critical height (Hcr)")
     else:
-        require_positive(inp.get("a"), "Square column width (a)")
         if inp.get("Hcr_condition") == "Filz et al. (2015)":
             require_positive(inp.get("s_prime"), "Distance from column edge to array centroid (s')")
     if inp.get("Hcr_method") == "table_10_4":
@@ -101,3 +100,8 @@ def validate_hewlett_randolph_inputs(inp):
             "This value is not given a default in the source document."
         )
     require_positive(inp["Kp"], "Kp (coefficient of passive earth pressure)")
+    if abs(2 * inp["Kp"] - 3) < 1e-12:
+        raise ValidationError(
+            "Kp cannot be 1.5 because the Hewlett and Randolph arch-crown "
+            "equation has a zero denominator at Kp = 1.5."
+        )

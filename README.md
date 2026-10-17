@@ -24,11 +24,13 @@ The program works offline and does not need an internet connection after it has 
 4. Choose the **Critical Height** mode:
    - **Suggested (Table 10.4)** to select a published condition; or
    - **User input** to enter Hcr directly.
-5. If using a suggested condition, choose the applicable reference:
+5. If using a suggested condition, choose the applicable reference. The
+   default example selection is British Standard BS8006 (2010):
    Hewlett and Randolph (1988), Han and Gabr (2002), Chen et al. (2008a),
    Chen et al. (2010), British Standard BS8006 (2010), or Filz et al. (2015).
-6. Enter the project values in the **Inputs** tab. Enter the square column
-   width `a` for spacing-based conditions, or `s'` for the Filz condition.
+6. Enter the project values in the **Inputs** tab. The equivalent square
+   column width `a` is calculated automatically from the column diameter
+   `d`; enter `s'` only for the Filz condition.
 7. Select **Calculate**.
 8. Review the applied critical-height condition, H/Hcr comparison, results,
    and design checks.
@@ -64,6 +66,9 @@ The **Results** tab reports the main design values, including:
 - Soil arching and foundation bearing status.
 
 The **Calculation Details** tab shows how each value was obtained. Use this tab when checking inputs, reviewing assumptions, or preparing a project record.
+Each step displays the governing formula, substituted values, and the
+condition or branch applied. Chen et al. (2010) uses the selectable range
+`Hcr >= (1.1 to 1.5)(s-a)`.
 
 ## Engineering notice
 

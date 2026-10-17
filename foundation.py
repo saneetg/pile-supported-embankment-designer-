@@ -59,6 +59,10 @@ def run(inputs):
         "symbol": "delta_sigma_s",
         "equation": "delta_sigma_s = (gamma1*H1 + gamma2*H2) / (1 + (a^2/s^2)(n-1))",
         "substitution": (
+            f"Numerator = {inputs['gamma1']}*{inputs['H1']} + "
+            f"{inputs['gamma2']}*{inputs['H2']}; "
+            f"Denominator = 1 + ({inputs['a']:.4f}^2/{inputs['s']}^2)*"
+            f"({inputs['n']}-1); "
             f"delta_sigma_s = ({inputs['gamma1']}*{inputs['H1']} + "
             f"{inputs['gamma2']}*{inputs['H2']}) / "
             f"(1 + ({inputs['a']:.4f}^2/{inputs['s']}^2)*({inputs['n']}-1))"
@@ -73,7 +77,7 @@ def run(inputs):
         "title": "Ultimate bearing capacity of soft soil",
         "symbol": "q_ult",
         "equation": "q_ult = 5.14 * cu",
-        "substitution": f"q_ult = 5.14 * {inputs['cu']}",
+        "substitution": f"q_ult = 5.14 * {inputs['cu']} = {q_ult:.3f} kPa",
         "result": q_ult,
         "unit": "kPa",
         "source": "Supplied PDF, p.363, worked step 4 (standard undrained bearing capacity form used in source)",
@@ -82,7 +86,7 @@ def run(inputs):
         "title": "Allowable bearing capacity",
         "symbol": "q_a",
         "equation": "q_a = q_ult / FS",
-        "substitution": f"q_a = {q_ult:.3f} / {inputs['FS']}",
+        "substitution": f"q_a = q_ult / FS = {q_ult:.3f} / {inputs['FS']} = {q_a:.3f} kPa",
         "result": q_a,
         "unit": "kPa",
         "source": "Supplied PDF, p.361, Eq. (10.28)",
@@ -91,7 +95,7 @@ def run(inputs):
         "title": "Foundation bearing check",
         "symbol": "q_a vs delta_sigma_s",
         "equation": "q_a >= delta_sigma_s  (required)",
-        "substitution": f"{q_a:.3f} >= {dsigma_s:.3f} ?",
+        "substitution": f"Condition applied: q_a >= delta_sigma_s; {q_a:.3f} >= {dsigma_s:.3f} ?",
         "result": "PASS" if passed else "FAIL",
         "unit": "",
         "source": "Supplied PDF, p.361, Eq. (10.28)",
